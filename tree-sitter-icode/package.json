@@ -1,0 +1,7 @@
+{
+  "name": "tree-sitter-icode",
+  "version": "0.1.0",
+  "description": "Tree-sitter grammar for IntentCode",
+  "main": "bindings/node",
+  "tree-sitter": [{ "scope": "source.icode", "file-types": ["icode"] }]
+}
