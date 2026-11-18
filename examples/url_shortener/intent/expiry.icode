@@ -1,0 +1,17 @@
+#import repository.icode
+
+component ExpiryJob [
+    Repository
+
+    Runs in the background, every 5s
+
+    assumption [
+        A request may read a link after it expired but before this job marked it. This is harmless.
+    ]
+
+    run [
+        @Repository.soft_delete_expired(now)
+
+        On Unavailable, log it and skip this run, the next run catches up
+    ]
+]

@@ -1,0 +1,60 @@
+#import utils.icode
+
+data Link [
+    slug:    string  `4 <= len <= 12`
+    target:  url
+    created: time
+    expires: time?
+    deleted: time?   // soft delete marker, set by ExpiryJob when the link has expired
+]
+
+data RepositoryError [
+    Duplicate:   a link with the same slug already exists
+    NotFound:    no link with that slug exists
+    Unavailable: the database failed and the retries were exhausted
+]
+
+component Repository [
+    db: sqlite
+    Link.slug is the unique key, enforced by the database itself
+    Soft deleted links keep their row, so their slug stays taken
+
+    insert(Link) -> RepositoryError [
+        Atomic: Duplicate comes from the database rejecting the unique key, never from checking first and inserting after
+
+        Errors: 
+          - Duplicate if a link with the same slug already exists
+          - Unavailable on any other database failure
+    ]
+    get(Link.slug) -> Link, RepositoryError [
+        @retry(2^n*0.1s, 5 tries)
+
+        Also returns expired and soft deleted links, the caller decides what they mean
+        Errors:
+          - NotFound if there is no Link with that slug
+          - Unavailable on any other database failure, after the retries
+    ]
+    with_prefix(string) -> list(Link), RepositoryError [
+        @retry(2^n*0.1s, 5 tries)
+
+        Returns every Link whose slug starts with the given prefix, in a single query
+        Includes expired and soft deleted links, because their slug is still taken
+        Errors:
+          - Unavailable on any other database failure, after the retries
+    ]
+    soft_delete_expired(time) -> RepositoryError [
+        @retry(2^n*0.1s, 5 tries)
+
+        Sets deleted on every non deleted link that has expired
+
+        Idempotent: running it twice, or from two instances at once, gives the same result
+        Errors:
+          - Unavailable on any other database failure, after the retries
+    ]
+    renew(Link.slug, time) -> RepositoryError [
+        Clears deleted and sets expires to the given time, in a single statement
+        Errors:
+          - NotFound if there is no Link with that slug
+          - Unavailable on any other database failure
+    ]
+]

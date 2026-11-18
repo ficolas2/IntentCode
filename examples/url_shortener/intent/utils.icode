@@ -1,0 +1,22 @@
+behaviour retry [
+    // The usage line behaves like a rust macro. 
+    // This allows the possibility of code looking more like natural language, while
+    // still adhering to defined rules.
+    // 
+    // Usage can be overloaded
+    usage: @retry($backoff, $attempts tries)
+    usage: @retry($backoff, $attempts tries) on $errors
+
+    [Adds retries to a behaviour]
+    params:
+    backoff [
+        A valid expression for the retry delay. For example:
+        2^n*0.1s is an exponential backoff with a base of 0.1s
+        2^n*0.1s+rand(0.1s) is the same exponential with 0.1s jitter
+    ]
+    attempts [] // Simple enough that self defines, no need to specify an explanation
+    errors [
+        Only these errors are retried, any other error is returned immediately.
+        Without an `on` clause, only transient errors are retried.
+    ]
+]
