@@ -1,0 +1,10 @@
+// Types the other files use without defining them.
+
+data url [
+    An absolute URL: scheme http or https, with a host
+]
+
+data time [
+    A point in time, always UTC
+    In JSON, an RFC 3339 string, for example 2030-01-02T03:04:05Z
+]

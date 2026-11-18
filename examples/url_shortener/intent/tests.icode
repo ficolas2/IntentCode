@@ -1,0 +1,97 @@
+#import api.icode
+#import expiry.icode
+
+// Tests run against a fresh database and a clock they control (`now`).
+// "the hash of T" means T hashed with the same algorithm POST uses.
+
+test creates_a_short_link [
+    Given an empty database
+    When POST /url with { "target": "https://example.com/a" }
+    Then the status is 201
+    And the body matches LinkResponse
+    And slug satisfies the constraint of Link.slug
+    And expires is 30 days after now
+]
+
+test same_target_returns_the_same_link [
+    Given a POST /url for a target that returned 201
+    When the same target is posted again
+    Then the status is 200 and the slug is the same
+    And the database still holds one link for that target
+]
+
+test longer_slug_when_the_prefix_is_taken [
+    Given a link for another target whose slug is the shortest prefix of the hash of target
+    When POST /url with target
+    Then the status is 201
+    And the new slug starts with that prefix and is longer than it
+]
+
+test no_free_slug [
+    Given links for other targets that hold every allowed prefix of the hash of target
+    When POST /url with target
+    Then the status is 409 and nothing is inserted
+]
+
+test concurrent_posts_of_the_same_target [
+    When two POST /url for the same new target run at the same time
+    Then one gets 201 and the other 200
+    And both return the same slug and the database holds one link
+]
+
+test concurrent_posts_whose_hashes_share_a_prefix [
+    When two POST /url for different targets that need the same slug run at the same time
+    Then both get 201 with different slugs
+]
+
+test renews_an_expired_link [
+    Given a link that has expired, or was soft deleted, for target
+    When POST /url with target
+    Then the status is 200
+    And the link is not deleted and expires is 30 days after now
+]
+
+test rejects_invalid_input [
+    When POST /url with a target that is not a url
+    Or POST /url with an expires that is not a time
+    Then the status is 400 and nothing is inserted
+]
+
+test redirects_to_the_target [
+    Given a stored link
+    When GET /{slug}
+    Then the status is 302 and Location is the target
+]
+
+test get_link_info [
+    Given a stored link
+    When GET /url?slug=slug
+    Then the status is 200 and the body matches LinkResponse
+]
+
+test unknown_expired_deleted_and_invalid_slugs [
+    When GET /{slug} or GET /url?slug for a slug that does not exist, then 404
+    When it exists but has expired, or was soft deleted, then 410
+    When the slug does not satisfy the constraint of Link.slug, then 400
+]
+
+test database_unavailable [
+    Given the database fails every call
+    When any endpoint is called
+    Then the status is 503, after the retries of Repository
+]
+
+test expiry_job_soft_deletes_expired_links [
+    Given one expired link and one that has not expired
+    When ExpiryJob runs
+    Then only the expired link is soft deleted
+    And its slug is still taken
+    And running the job again changes nothing
+]
+
+test expiry_job_survives_unavailable [
+    Given the database is unavailable
+    When ExpiryJob runs
+    Then it logs and does not crash
+    And the next run, once the database is back, soft deletes the expired links
+]

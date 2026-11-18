@@ -1,4 +1,5 @@
 #import utils.icode
+#import types.icode
 
 data Link [
     slug:    string  `4 <= len <= 12`
@@ -20,11 +21,14 @@ component Repository [
     Soft deleted links keep their row, so their slug stays taken
 
     insert(Link) -> RepositoryError [
+        @retry(2^n*0.1s, 5 tries)
+
         Atomic: Duplicate comes from the database rejecting the unique key, never from checking first and inserting after
+        A retried insert can hit Duplicate because an earlier attempt did go through. The caller tells by querying again.
 
         Errors: 
           - Duplicate if a link with the same slug already exists
-          - Unavailable on any other database failure
+          - Unavailable on any other database failure, after the retries
     ]
     get(Link.slug) -> Link, RepositoryError [
         @retry(2^n*0.1s, 5 tries)
@@ -52,9 +56,12 @@ component Repository [
           - Unavailable on any other database failure, after the retries
     ]
     renew(Link.slug, time) -> RepositoryError [
+        @retry(2^n*0.1s, 5 tries)
+
         Clears deleted and sets expires to the given time, in a single statement
+        Idempotent: running it twice gives the same result
         Errors:
           - NotFound if there is no Link with that slug
-          - Unavailable on any other database failure
+          - Unavailable on any other database failure, after the retries
     ]
 ]

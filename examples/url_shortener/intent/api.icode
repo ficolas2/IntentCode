@@ -1,4 +1,5 @@
 #import repository.icode
+#import types.icode
 #import utils.icode
 
 data LinkResponse [ json {
@@ -27,7 +28,8 @@ component Api [
         Status: 
           - 404 if there is no such slug
           - 410 if the link exists but has expired or was soft deleted
-          - 400 if slug does not satisfy the constraint of Link.slug
+          - 400 if slug is missing or does not satisfy the constraint of Link.slug
+          - 503 on Unavailable
     ]
 
     GET /{slug} [
@@ -39,6 +41,7 @@ component Api [
           - 404 if there is no such slug
           - 410 if the link exists but has expired or was soft deleted
           - 400 if slug does not satisfy the constraint of Link.slug
+          - 503 on Unavailable
     ]
 
     POST /url { "target": url, "expires"?: time } -> LinkResponse [
@@ -50,11 +53,11 @@ component Api [
             // The compiler will ask the LLM to fill in blocks in angle brackets 
             // like <hashing algorithm>
             hash = [Hash the target using <hashing algorithm>]
-            links = @Repository.with_prefix(hash[0:3])
+            links = @Repository.with_prefix(hash[0:4])
 
 
             if !links.contains(target) [
-                slug = [smallest substring of hash that is not used by another link]
+                slug = [smallest prefix of hash that is not used by another link]
                 @Repository.insert(@Link(
                     slug,
                     target,
@@ -71,8 +74,8 @@ component Api [
         Status:
           - 201 with the stored link
           - 200 with the existing link, nothing inserted, if a link with the same target already exists (renewed first if it had expired)
-          - 400 if target is not a valid url, or expires is invalid
-          - 409 if every substring of hash is the slug of a link with a different target
+          - 400 if target is not a valid url, or expires is invalid or not in the future
+          - 409 if every prefix of hash is the slug of a link with a different target
           - 503 on Unavailable, or if insert is still Duplicate after the retries
     ]
 
